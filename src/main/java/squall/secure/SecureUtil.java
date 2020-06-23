@@ -5,6 +5,7 @@ import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Security;
+import java.security.Signature;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
@@ -17,12 +18,32 @@ import org.apache.commons.codec.binary.Base64;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 /**
- * 加密解密工具类，内置了支持JCE和BC
+ * 加密解密验签工具类，内置了支持JCE和BC
  * 
  * @author squall
  *
  */
 public class SecureUtil {
+	
+	
+
+	/**
+	 * 空构造后续必须SET transformation
+	 */
+	public SecureUtil() {
+	}
+	
+	
+
+	/**
+	 * 
+	 * @param transformation
+	 */
+	public SecureUtil(String transformation) {
+		setTransformation(transformation);;
+	}
+
+
 
 	/**
 	 * 转换格式 算法/模式/填充方式,如果只填入算法则根据当前Provider此算法的默认模式和填充实现 如
@@ -136,14 +157,7 @@ public class SecureUtil {
 	 * @throws Exception 太多了，如果以后需要有特殊处理的实现，会在内部进行处理以容错
 	 */
 	public byte[] encryptByPrivateKey(byte[] keyData, byte[] data) throws Exception {
-		KeyFactory keyFactory = null;
-		if (keyProvider != null && !"".equals(keyProvider)) {
-			keyFactory = KeyFactory.getInstance(algorithm, keyProvider);
-		} else {
-			keyFactory = KeyFactory.getInstance(algorithm);
-		}
-		PKCS8EncodedKeySpec pkcs8KeySpec = new PKCS8EncodedKeySpec(keyData);
-		PrivateKey privateKey = keyFactory.generatePrivate(pkcs8KeySpec);
+		PrivateKey privateKey  = getPrivateKeyByData(keyData);
 		return encryptByPrivateKey(privateKey, data);
 	}
 
@@ -156,14 +170,7 @@ public class SecureUtil {
 	 * @throws Exception 太多了，如果以后需要有特殊处理的实现，会在内部进行处理以容错
 	 */
 	public byte[] decryptByPrivateKey(byte[] keyData, byte[] data) throws Exception {
-		KeyFactory keyFactory = null;
-		if (keyProvider != null && !"".equals(keyProvider)) {
-			keyFactory = KeyFactory.getInstance(algorithm, keyProvider);
-		} else {
-			keyFactory = KeyFactory.getInstance(algorithm);
-		}
-		PKCS8EncodedKeySpec pkcs8KeySpec = new PKCS8EncodedKeySpec(keyData);
-		PrivateKey privateKey = keyFactory.generatePrivate(pkcs8KeySpec);
+		PrivateKey privateKey  = getPrivateKeyByData(keyData);
 		return decryptByPrivateKey(privateKey, data);
 	}
 
@@ -176,14 +183,7 @@ public class SecureUtil {
 	 * @throws Exception 太多了，如果以后需要有特殊处理的实现，会在内部进行处理以容错
 	 */
 	public byte[] encryptByPublicKey(byte[] keyData, byte[] data) throws Exception {
-		KeyFactory keyFactory = null;
-		if (keyProvider != null && !"".equals(keyProvider)) {
-			keyFactory = KeyFactory.getInstance(algorithm, keyProvider);
-		} else {
-			keyFactory = KeyFactory.getInstance(algorithm);
-		}
-		X509EncodedKeySpec x509KeySpec = new X509EncodedKeySpec(keyData);
-		PublicKey publicKey = keyFactory.generatePublic(x509KeySpec);
+		PublicKey publicKey = getPublicKeyByData(keyData);
 		return encryptByPublicKey(publicKey, data);
 	}
 
@@ -196,14 +196,7 @@ public class SecureUtil {
 	 * @throws Exception 太多了，如果以后需要有特殊处理的实现，会在内部进行处理以容错
 	 */
 	public byte[] decryptByPublicKey(byte[] keyData, byte[] data) throws Exception {
-		KeyFactory keyFactory = null;
-		if (keyProvider != null && !"".equals(keyProvider)) {
-			keyFactory = KeyFactory.getInstance(algorithm, keyProvider);
-		} else {
-			keyFactory = KeyFactory.getInstance(algorithm);
-		}
-		X509EncodedKeySpec x509KeySpec = new X509EncodedKeySpec(keyData);
-		PublicKey publicKey = keyFactory.generatePublic(x509KeySpec);
+		PublicKey publicKey = getPublicKeyByData(keyData);
 		return decryptByPublicKey(publicKey, data);
 	}
 
@@ -283,13 +276,13 @@ public class SecureUtil {
 		} else {
 			cipher = Cipher.getInstance(transformation);
 		}
-		if (ivData != null) {
+		if (ivData.length != 0) {
 			IvParameterSpec iv = new IvParameterSpec(ivData[0]);
 			cipher.init(Cipher.ENCRYPT_MODE, key, iv);
 		} else {
 			cipher.init(Cipher.ENCRYPT_MODE, key);
 		}
-		return cipher.doFinal();
+		return cipher.doFinal(data);
 	}
 
 	/**
@@ -308,13 +301,13 @@ public class SecureUtil {
 		} else {
 			cipher = Cipher.getInstance(transformation);
 		}
-		if (ivData != null) {
+		if (ivData.length != 0) {
 			IvParameterSpec iv = new IvParameterSpec(ivData[0]);
 			cipher.init(Cipher.DECRYPT_MODE, key, iv);
 		} else {
 			cipher.init(Cipher.DECRYPT_MODE, key);
 		}
-		return cipher.doFinal();
+		return cipher.doFinal(data);
 	}
 
 	/**
@@ -328,7 +321,10 @@ public class SecureUtil {
 	 */
 	public byte[] encryptByKey(byte[] keyData, byte[] data, byte[]... ivData) throws Exception {
 		SecretKey key = new SecretKeySpec(keyData, algorithm);
-		return encryptByKey(key, data, ivData);
+		if(ivData.length == 0)
+			return encryptByKey(key, data);
+		else
+		    return encryptByKey(key, data, ivData);
 	}
 
 	/**
@@ -342,7 +338,10 @@ public class SecureUtil {
 	 */
 	public byte[] decryptByKey(byte[] keyData, byte[] data, byte[]... ivData) throws Exception {
 		SecretKey key = new SecretKeySpec(keyData, algorithm);
-		return decryptByKey(key, data, ivData);
+		if(ivData.length == 0)
+			return decryptByKey(key, data);
+		else
+		    return decryptByKey(key, data, ivData);
 	}
 
 	/**
@@ -383,6 +382,63 @@ public class SecureUtil {
 		}
 		return Base64.encodeBase64String(decryptByKey(keyData, data, ivData));
 	}
+	
+	/**
+	 * 使用私钥签名
+	 * @param signAlgorithm 签名算法
+	 * @param key 私钥对象
+	 * @param data 待签名数据
+	 * @return 签名后的数据
+	 * @throws NoSuchAlgorithmException 
+	 */
+	public byte[] signByPrivateKey(String signAlgorithm, PrivateKey key, byte[] data) throws Exception {
+		Signature sig = Signature.getInstance(signAlgorithm);
+		sig.initSign(key);
+		sig.update(data);
+		return sig.sign();
+	}
+	
+	/**
+	 * 使用公钥验签
+	 * @param signAlgorithm 签名算法
+	 * @param key 公钥对象
+	 * @param data 原始数据
+	 * @param signData 需要验证的签名数据
+	 * @return true表示验证成功,false表示验证失败
+	 */
+	public boolean verifyByPublicKey(String signAlgorithm, PublicKey key, byte[] data, byte[] signData) throws Exception{
+		Signature sig = Signature.getInstance(signAlgorithm);
+		sig.initVerify(key);
+		sig.update(data);
+		return sig.verify(signData);
+	}
+	
+	/**
+	 * 使用私钥字符数组签名
+	 * @param signAlgorithm 签名算法
+	 * @param keyData 私钥字符数组符合PKCS8EncodedKeySpec
+	 * @param data 待签名数据
+	 * @return 签名后的数据
+	 * @throws NoSuchAlgorithmException 
+	 */
+	public byte[] signByPrivateKey(String signAlgorithm, byte[] keyData, byte[] data) throws Exception {
+		PrivateKey key = getPrivateKeyByData(keyData);
+		return signByPrivateKey(signAlgorithm,key,data);
+	}
+	
+	/**
+	 * 使用公钥验签
+	 * @param signAlgorithm 签名算法
+	 * @param key 公钥对象
+	 * @param data 原始数据
+	 * @param signData 需要验证的签名数据
+	 * @return true表示验证成功,false表示验证失败
+	 */
+	public boolean verifyByPublicKey(String signAlgorithm, byte[] keyData, byte[] data, byte[] signData) throws Exception{
+		PublicKey key = getPublicKeyByData(keyData);
+		return verifyByPublicKey(signAlgorithm,key,data,signData);
+	}
+	
 
 	/**
 	 * 设置转换格式 算法/模式/填充方式,如果只填入算法则根据当前Provider此算法的默认模式和填充实现
@@ -398,9 +454,43 @@ public class SecureUtil {
 		}
 		this.transformation = transformation;
 	}
+	
+	/**
+	 * 使用私钥的字节数组构造私钥，需要符合PKCS8EncodedKeySpec格式
+	 * @param keyData 私钥的字节数组
+	 * @return 私钥对象
+	 * @throws Exception 一堆异常可能，如果要处理以后补充
+	 */
+	public PrivateKey  getPrivateKeyByData(byte[] keyData) throws Exception {
+		KeyFactory keyFactory = null;
+		if (keyProvider != null && !"".equals(keyProvider)) {
+			keyFactory = KeyFactory.getInstance(algorithm, keyProvider);
+		} else {
+			keyFactory = KeyFactory.getInstance(algorithm);
+		}
+		PKCS8EncodedKeySpec pkcs8KeySpec = new PKCS8EncodedKeySpec(keyData);
+		return keyFactory.generatePrivate(pkcs8KeySpec);
+	}
+	
+	/**
+	 * 使用私钥的字节数组构造私钥，需要符合X509EncodedKeySpec格式
+	 * @param keyData 私钥的字节数组
+	 * @return 私钥对象
+	 * @throws Exception 一堆异常可能，如果要处理以后补充
+	 */
+	public PublicKey getPublicKeyByData(byte[] keyData) throws Exception{
+		KeyFactory keyFactory = null;
+		if (keyProvider != null && !"".equals(keyProvider)) {
+			keyFactory = KeyFactory.getInstance(algorithm, keyProvider);
+		} else {
+			keyFactory = KeyFactory.getInstance(algorithm);
+		}
+		X509EncodedKeySpec x509KeySpec = new X509EncodedKeySpec(keyData);
+		return keyFactory.generatePublic(x509KeySpec);
+	}
 
 	/**
-	 * 设置加解密使用的Provider，如果不设置默认JCE
+	 * 设置加解密使用的Provider，如果不设置默认JCE,JCE没有的话会尝试BC
 	 * 
 	 * @param cipherProvider
 	 */
